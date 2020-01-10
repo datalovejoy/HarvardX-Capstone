@@ -1,0 +1,168 @@
+---
+title: "Predicting Rent Prices Using Socioeconomic and Demographic Predictors"
+author: "David Lovejoy"
+date: "1/9/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Executive Summary
+
+This document outlines an analysis of monthly gross rent at the county level using various socioeconomic and demographic information. The census data was provided by the United States Department of Agriculture (USDA) Economic Research Service, and based on 40 specific features across all 50 states in the U.S.
+
+After calculating summary and descriptive statistics, and creating visualizations to better understand the data, several potential relationships between renter characteristics and monthly gross rent were identified. After a thorough exploration the data, a linear regression model was used to predict monthly gross rent from renter features.
+
+From the analysis of this admittedly small sample of a much larger general population, there were several significant features found in the health and demographic variables:
+
+  * **Health** --- Higher instances of physical inactivity, obesity, and heart disease had a negative correlation with monthly gross rent.
+  * **Demographic** --- Higher gross monthly rent tends to correlate with larger percentages of the population with at least a bachelor’s degree. Conversely, there was a negative correlation with the percentage of the population with a high school diploma as the highest level of education, as well as with a higher death rate per 1,000 residents.
+  
+# Data Exploration
+
+Installing missing packages, importing the data and getting a sense for how it is structured:
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# Note: this process could take a couple of minutes
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(corrplot)) install.packages("corrplot", repos = "http://cran.us.r-project.org")
+if(!require(ggpubr)) install.packages("ggpubr", repos = "http://cran.us.r-project.org")
+if(!require(GGally)) install.packages("GGally", repos = "http://cran.us.r-project.org")
+if(!require(modelsummary)) install.packages("modelsummary", repos = "http://cran.us.r-project.org")
+
+# Load libraries
+library(caret)
+library(tidyverse)
+library(data.table)
+library(corrplot)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(GGally)
+library(modelsummary)
+library(cowplot)
+
+data <- read.csv("https://raw.githubusercontent.com/lovejoylink/HarvardX-Capstone-Project/master/NationalRents/us_census_data.csv", stringsAsFactors = FALSE)
+```
+
+```{r}
+data %>% as_tibble()
+```
+
+There are 3,138 rows, in this case counties, and 40 columns, or features of each county. Next, a search and replacement for missing values was conducted.
+
+```{r}
+# check for missing values
+sum(is.na(data))
+# replace missing values
+data[is.na(data)] <- 0
+# check again for missing values
+sum(is.na(data))
+```
+
+Partition the data into a train set and a test set:
+
+```{r}
+set.seed(1)
+test_index <- createDataPartition(y = data$gross_rent, times = 1, p = 0.1, list = FALSE)
+train <- data[-test_index,]
+test <- data[test_index,]
+```
+
+Summarizing data in the target variable of **gross_rent**:
+
+```{r}
+summary(train$gross_rent)
+sd(train$gross_rent)
+```
+
+It is worth mentioning that the mean and median of the variable gross_rent, the focus of this analysis, differ somewhat significantly and that the relatively large standard deviation is indicative of considerable variance in the gross rent of different counties. A histogram of the gross_rent column shows that the rent values are right-skewed --- meaning most rent values are located towards the lower end of the range, as shown here:
+
+```{r}
+train %>%
+ggplot(aes(gross_rent)) +
+geom_histogram(bins = 30, fill = "blue", col = "black") +
+xlab("US Dollars") +
+ylab("Number of Counties") +
+ggtitle("Distribution of Monthly Rent")
+```
+
+Checking variable correlation with **gross_rent**:
+
+```{r}
+correlation <- apply(train,2, function(col)cor(col, train$gross_rent))
+cor_table <- data.frame(correlation)
+cor_table
+```
+
+The percentage of adults with a bachelor's degree and the percentage of the Asian population both have a positive correlation with monthly rents. Conversely, the death rate per thousand residents, physical inactivity percentages, and percentages of adults with a high school diploma being the highest level of education received share a negative correlation with monthly rents. Interesting then, that there does not seem to be a strong correlation with the percentage of adults with less than a high school diploma.
+
+# Visualization
+
+Create new data frame with potential predictors:
+
+```{r}
+df <- data.frame(train$pct_asian,train$pct_adults_bachelors_or_higher,train$pct_adults_with_high_school_diploma,train$pct_physical_inactivity, train$death_rate_per_1k, train$gross_rent)
+
+# rename columns
+names(df)[names(df) == 'train.gross_rent'] <- 'Rent'
+names(df)[names(df) == 'train.pct_physical_inactivity'] <- 'Inactivity'
+names(df)[names(df) == 'train.pct_adults_with_high_school_diploma'] <- 'HS Diploma'
+names(df)[names(df) == 'train.death_rate_per_1k'] <- 'Deaths'
+names(df)[names(df) == 'train.pct_asian'] <- 'Asian Pop'
+names(df)[names(df) == 'train.pct_adults_bachelors_or_higher'] <- 'Bachelors'
+
+colnames(df)
+```
+
+To better understand the complexity of the data, multi-faceted plots were made to discover and track patterns and relationships. There is perhaps a predictable inverse correlation between the percentage of the population obtaining a Bachelor's degree or higher and the percentage of the population with only a high school diploma.
+
+```{r}
+ggpairs(df, columns = 2:4, ggplot2::aes(colour= "id"))
+```
+
+Rather surprisingly, physical inactivity and the percentages of the population with a high school diploma as the highest level of education received seem to be correlated.
+
+# Analysis
+
+There seemed to be a clear linear relationship between the percentage of the population that has attained a bachelor's degree or higher level of education and the monthly rent prices.
+
+```{r}
+train %>% ggplot(aes(gross_rent, pct_adults_bachelors_or_higher)) +
+geom_point() +
+geom_smooth(method = "lm")
+```
+
+# Analysis
+
+Based on the bivariate normal relationships identified when analyzing the data, a linear regression model was created to predict the value for monthly rent.
+
+```{r}
+fit_1 <- lm(gross_rent ~ pct_adults_bachelors_or_higher, data = train)
+```
+
+Calculate the root mean squared error (RMSE) to see the accuracy of the prediction model on the test data.
+
+```{r}
+prediction <- predict(fit_1, test)
+error <- prediction - test[["gross_rent"]]
+sqrt(mean(error^2))
+```
+
+That RMSE result does not look very promising. Try multiple regression model:
+
+```{r}
+fit_2 <- lm(gross_rent ~ pct_adults_bachelors_or_higher + pct_asian + pct_adults_with_high_school_diploma + death_rate_per_1k + pct_physical_inactivity, data = train)
+
+prediction <- predict(fit_2, test)
+error <- prediction - test[["gross_rent"]]
+sqrt(mean(error^2))
+```
+
+That is a sizeable improvement to the RMSE result, but still not ideal. 
+
+# Conclusion
+
+This analysis has shown that, while monthly rents at the county level are correlated with certain socioeconomic and demographic indicators, such as the percentages of the population physically inactivite and level of education completed, they cannot be predicted to a high level of accuracy using these variables alone. Furthermore, there is a surprising correlation between physical inactivity and percentages of the population to not have obtained a degree beyond a high school diploma, which should warrant further research.
