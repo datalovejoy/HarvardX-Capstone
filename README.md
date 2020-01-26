@@ -1,4 +1,4 @@
-# HarvardX-Capstone-Project
+# HarvardX Professional Certificate in Data Science
 
 This project is the culmination of a nine-course data science program by HarvardX, a collaboration between Harvard University and edX. After successful peer and staff review, students are awarded the Professional Certificate in Data Science. The series began with an introduction to the R programming language and instruction on how to effectively visualize data. Next, it looked at the importance and methods of data wrangling, cautioned against spurious correlation and confounding variables, and continued with a practical explanation of Bayesian statistics, the central limit theorem, and implementation of linear regression models.
 
